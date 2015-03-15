@@ -1,0 +1,267 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="Keywords" content="blog"/>
+    <meta name="Description" content="blog"/>
+    <title>Simple</title>
+    <link rel="shortcut icon" href="/static/favicon.png"/>
+    <link rel="stylesheet" type="text/css" href="/main.css" />
+</head>
+<body>
+<div class="main">
+    <div class="header">
+    	<ul id="pages">
+            <li><a href="/">home</a></li>
+            <li><a href="/#/tags">tags</a></li>
+            <li><a href="/#/archive">archive</a></li>
+    	</ul>
+    </div>
+	<div class="wrap-header">
+	<h1>
+    <a href="/" id="title"></a>
+	</h1>
+	</div>
+<div id="md" style="display: none;">
+<!-- markdown -->
+#Linux内核分析 lab2
+##完成一个简单的时间片轮转多道程序内核代码
+
+实验环境: [实验楼虚拟机](http://www.shiyanlou.com/courses/195)
+
+实验目的: 通过完成一个简单的时间片轮转多道程序内核代码,分析进程的启动和进程的切换机制,理解操作系统是究竟是如何工作的
+
+在实验楼已经搭建好了环境,此处源码均来自于[mykernel](https://github.com/mengning/mykernel)
+
+##源码分析
+核心代码在3个文件中
+
++ mypcb.h   [PCB模块](http://baike.baidu.com/subview/3672/15988026.htm#viewPageContent)
++ mymain.c 初始化PCB  并从0号进程启动
++ myinterrupt.c 时钟中断和进程调度
+
+代码修改后
+```
+$ make
+$ qemu -kernel arch/x86/boot/bzImage
+```
+由于时间片过大  效果不明显  修改myinterrupt.c中时间片  改到25后
+执行结果如下
+![lab2](http://img1.ph.126.net/7mzZw8Q1GtwwAy-Hu_pN3A==/6630900639931454374.jpg)
+在图中可以发现  当进程0执行一段时间后 时间片用完
+
+内核从mymain.c 中的my_start_kernel函数开始执行
+```c
+    int pid = 0;
+    int i;
+    /* Initialize process 0*/
+    task[pid].pid = pid;
+    task[pid].state = 0;/* -1 unrunnable, 0 runnable, >0 stopped */
+    task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
+    task[pid].thread.sp = (unsigned long)&task[pid].stack[KERNEL_STACK_SIZE-1];
+    task[pid].next = &task[pid];
+    /*fork more process */
+    for(i=1;i<MAX_TASK_NUM;i++)
+    {
+        memcpy(&task[i],&task[0],sizeof(tPCB));
+        task[i].pid = i;
+        task[i].state = -1;
+        task[i].thread.sp = (unsigned long)&task[i].stack[KERNEL_STACK_SIZE-1];
+        task[i].next = task[i-1].next;
+        task[i-1].next = &task[i];
+    }
+```
+这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 `runnable`  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是`unrunnable` 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表
+
+
+```c
+    pid = 0;
+    my_current_task = &task[pid];
+	asm volatile(
+    	"movl %1,%%esp\n\t" 	/* set task[pid].thread.sp to esp */
+    	"pushl %1\n\t" 	        /* push ebp */
+    	"pushl %0\n\t" 	        /* push task[pid].thread.ip */
+    	"ret\n\t" 	            /* pop task[pid].thread.ip to eip */
+    	"popl %%ebp\n\t"
+    	: 
+    	: "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)	/* input c or d mean %ecx/%edx*/
+	);
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+鲍翔 +   原创作品转载请注明出处 + [《Linux内核分析》MOOC课程](http://mooc.study.163.com/course/USTC-1000029000)
+<!-- markdown end -->
+</div>
+<div class="entry" id="main">
+<!-- content -->
+<h1 id="linuxlab2">Linux内核分析 lab2</h1>
+
+<h2 id="">完成一个简单的时间片轮转多道程序内核代码</h2>
+
+<p>实验环境: <a href="http://www.shiyanlou.com/courses/195">实验楼虚拟机</a></p>
+
+<p>实验目的: 通过完成一个简单的时间片轮转多道程序内核代码,分析进程的启动和进程的切换机制,理解操作系统是究竟是如何工作的</p>
+
+<p>在实验楼已经搭建好了环境,此处源码均来自于<a href="https://github.com/mengning/mykernel">mykernel</a></p>
+
+<h2 id="">源码分析</h2>
+
+<p>核心代码在3个文件中</p>
+
+<ul>
+<li>mypcb.h   <a href="http://baike.baidu.com/subview/3672/15988026.htm#viewPageContent">PCB模块</a></li>
+<li>mymain.c 初始化PCB  并从0号进程启动</li>
+<li>myinterrupt.c 时钟中断和进程调度</li>
+</ul>
+
+<p>代码修改后</p>
+
+<pre><code>$ make
+$ qemu -kernel arch/x86/boot/bzImage
+</code></pre>
+
+<p>由于时间片过大  效果不明显  修改myinterrupt.c中时间片  改到25后
+执行结果如下
+<img src="http://img1.ph.126.net/7mzZw8Q1GtwwAy-Hu_pN3A==/6630900639931454374.jpg" alt="lab2" title="">
+在图中可以发现  当进程0执行一段时间后 时间片用完</p>
+
+<p>内核从mymain.c 中的my<em>start</em>kernel函数开始执行</p>
+
+<pre><code class="c">    int pid = 0;
+    int i;
+    /* Initialize process 0*/
+    task[pid].pid = pid;
+    task[pid].state = 0;/* -1 unrunnable, 0 runnable, &gt;0 stopped */
+    task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
+    task[pid].thread.sp = (unsigned long)&amp;task[pid].stack[KERNEL_STACK_SIZE-1];
+    task[pid].next = &amp;task[pid];
+    /*fork more process */
+    for(i=1;i&lt;MAX_TASK_NUM;i++)
+    {
+        memcpy(&amp;task[i],&amp;task[0],sizeof(tPCB));
+        task[i].pid = i;
+        task[i].state = -1;
+        task[i].thread.sp = (unsigned long)&amp;task[i].stack[KERNEL_STACK_SIZE-1];
+        task[i].next = task[i-1].next;
+        task[i-1].next = &amp;task[i];
+    }
+</code></pre>
+
+<p>这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 <code>runnable</code>  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是<code>unrunnable</code> 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表</p>
+
+<pre><code class="c">    pid = 0;
+    my_current_task = &amp;task[pid];
+    asm volatile(
+        "movl %1,%%esp\n\t"     /* set task[pid].thread.sp to esp */
+        "pushl %1\n\t"          /* push ebp */
+        "pushl %0\n\t"          /* push task[pid].thread.ip */
+        "ret\n\t"               /* pop task[pid].thread.ip to eip */
+        "popl %%ebp\n\t"
+        : 
+        : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
+    );
+</code></pre>
+
+<p>鲍翔 +   原创作品转载请注明出处 + <a href="http://mooc.study.163.com/course/USTC-1000029000">《Linux内核分析》MOOC课程</a></p>
+<!-- content end -->
+</div>
+<br>
+<br>
+    <div id="disqus_thread"></div>
+	<div class="footer">
+		<p>© Copyright 2014 by isnowfy, Designed by isnowfy</p>
+	</div>
+</div>
+<script src="main.js"></script>
+<script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ["\\(", "\\)"]], processEscapes: true}});
+</script>
+<script id="content" type="text/mustache">
+    <h1>{{title}}</h1>
+    <div class="tag">
+    {{date}}
+    {{#tags}}
+    <a href="/#/tag/{{name}}">#{{name}}</a>
+    {{/tags}}
+    </div>
+</script>
+<script id="pagesTemplate" type="text/mustache">
+    {{#pages}}
+    <li>
+        <a href="{{path}}">{{title}}</a>
+    </li>
+    {{/pages}}
+</script>
+<script>
+$(document).ready(function() {
+    $.ajax({
+        url: "main.json",
+        type: "GET",
+        dataType: "json",
+        success: function(data) {
+            $("#title").html(data.name);
+            var pagesTemplate = Hogan.compile($("#pagesTemplate").html());
+            var pagesHtml = pagesTemplate.render({"pages": data.pages});
+            $("#pages").append(pagesHtml);
+            //path
+            var path = "linuxKernelLab2.html";
+            //path end
+            var now = 0;
+            for (var i = 0; i < data.posts.length; ++i)
+                if (path == data.posts[i].path)
+                    now = i;
+            var post = data.posts[now];
+            var tmp = post.tags.split(" ");
+            var tags = [];
+            for (var i = 0; i < tmp.length; ++i)
+                if (tmp[i].length > 0)
+                    tags.push({"name": tmp[i]});
+            var contentTemplate = Hogan.compile($("#content").html());
+            var contentHtml = contentTemplate.render({"title": post.title, "tags": tags, "date": post.date});
+            $("#main").prepend(contentHtml);
+            if (data.disqus_shortname.length > 0) {
+                var disqus_shortname = data.disqus_shortname;
+                (function() {
+                    var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+                    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+                    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+                })();
+            }
+        }
+    });
+});
+</script>
+</body>
+</html>
