@@ -52,7 +52,7 @@ $ qemu -kernel arch/x86/boot/bzImage
 在图中可以发现  当进程0执行一段时间后 时间片用完
 
 内核从mymain.c 中的my_start_kernel函数开始执行
-```c
+~~~~{c}
 int pid = 0;
 int i;
 /* Initialize process 0*/
@@ -71,11 +71,11 @@ for(i=1;i<MAX_TASK_NUM;i++)
     task[i].next = task[i-1].next;
     task[i-1].next = &task[i];
 }
-```
+~~~~
+
 这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 `runnable`  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是`unrunnable` 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表
 
-
-```c
+~~~~{c}
 pid = 0;
 my_current_task = &task[pid];
 asm volatile(
@@ -87,7 +87,7 @@ asm volatile(
     : 
     : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
 );
-```
+~~~~
 
 
 
@@ -158,39 +158,39 @@ $ qemu -kernel arch/x86/boot/bzImage
 
 <p>内核从mymain.c 中的my<em>start</em>kernel函数开始执行</p>
 
-<pre><code class="c">int pid = 0;
-int i;
-/* Initialize process 0*/
-task[pid].pid = pid;
-task[pid].state = 0;/* -1 unrunnable, 0 runnable, &gt;0 stopped */
-task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
-task[pid].thread.sp = (unsigned long)&amp;task[pid].stack[KERNEL_STACK_SIZE-1];
-task[pid].next = &amp;task[pid];
-/*fork more process */
-for(i=1;i&lt;MAX_TASK_NUM;i++)
-{
-    memcpy(&amp;task[i],&amp;task[0],sizeof(tPCB));
-    task[i].pid = i;
-    task[i].state = -1;
-    task[i].thread.sp = (unsigned long)&amp;task[i].stack[KERNEL_STACK_SIZE-1];
-    task[i].next = task[i-1].next;
-    task[i-1].next = &amp;task[i];
-}
+<pre class=" language-c"><code class=" language-c"><span class="token keyword">int</span> pid <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span> i<span class="token punctuation">;</span>
+<span class="token comment" spellcheck="true">/* Initialize process 0*/</span>
+task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>pid <span class="token operator">=</span> pid<span class="token punctuation">;</span>
+task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>state <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span><span class="token comment" spellcheck="true">/* -1 unrunnable, 0 runnable, &gt;0 stopped */</span>
+task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>task_entry <span class="token operator">=</span> task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>ip <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">unsigned</span> <span class="token keyword">long</span><span class="token punctuation">)</span>my_process<span class="token punctuation">;</span>
+task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>sp <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">unsigned</span> <span class="token keyword">long</span><span class="token punctuation">)</span><span class="token operator">&amp;</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>stack<span class="token punctuation">[</span>KERNEL_STACK_SIZE<span class="token number">-1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>next <span class="token operator">=</span> <span class="token operator">&amp;</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token comment" spellcheck="true">/*fork more process */</span>
+<span class="token keyword">for</span><span class="token punctuation">(</span>i<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">;</span>i<span class="token operator">&lt;</span>MAX_TASK_NUM<span class="token punctuation">;</span>i<span class="token operator">++</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+    <span class="token function">memcpy<span class="token punctuation">(</span></span><span class="token operator">&amp;</span>task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">,</span><span class="token operator">&amp;</span>task<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span><span class="token keyword">sizeof</span><span class="token punctuation">(</span>tPCB<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>pid <span class="token operator">=</span> i<span class="token punctuation">;</span>
+    task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>state <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span>
+    task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>sp <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">unsigned</span> <span class="token keyword">long</span><span class="token punctuation">)</span><span class="token operator">&amp;</span>task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>stack<span class="token punctuation">[</span>KERNEL_STACK_SIZE<span class="token number">-1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">.</span>next <span class="token operator">=</span> task<span class="token punctuation">[</span>i<span class="token number">-1</span><span class="token punctuation">]</span><span class="token punctuation">.</span>next<span class="token punctuation">;</span>
+    task<span class="token punctuation">[</span>i<span class="token number">-1</span><span class="token punctuation">]</span><span class="token punctuation">.</span>next <span class="token operator">=</span> <span class="token operator">&amp;</span>task<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
 </code></pre>
 
 <p>这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 <code>runnable</code>  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是<code>unrunnable</code> 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表</p>
 
-<pre><code class="c">pid = 0;
-my_current_task = &amp;task[pid];
-asm volatile(
-    "movl %1,%%esp\n\t"     /* set task[pid].thread.sp to esp */
-    "pushl %1\n\t"          /* push ebp */
-    "pushl %0\n\t"          /* push task[pid].thread.ip */
-    "ret\n\t"               /* pop task[pid].thread.ip to eip */
-    "popl %%ebp\n\t"
-    : 
-    : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
-);
+<pre class=" language-c"><code class=" language-c">pid <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+my_current_task <span class="token operator">=</span> <span class="token operator">&amp;</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token keyword">asm</span> <span class="token keyword">volatile</span><span class="token punctuation">(</span>
+    <span class="token string">"movl %1,%%esp\n\t"</span>     <span class="token comment" spellcheck="true">/* set task[pid].thread.sp to esp */</span>
+    <span class="token string">"pushl %1\n\t"</span>          <span class="token comment" spellcheck="true">/* push ebp */</span>
+    <span class="token string">"pushl %0\n\t"</span>          <span class="token comment" spellcheck="true">/* push task[pid].thread.ip */</span>
+    <span class="token string">"ret\n\t"</span>               <span class="token comment" spellcheck="true">/* pop task[pid].thread.ip to eip */</span>
+    <span class="token string">"popl %%ebp\n\t"</span>
+    <span class="token punctuation">:</span> 
+    <span class="token punctuation">:</span> <span class="token string">"c"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"d"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span>   <span class="token comment" spellcheck="true">/* input c or d mean %ecx/%edx*/</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
 </code></pre>
 
 <p>鲍翔 +   原创作品转载请注明出处 + <a href="http://mooc.study.163.com/course/USTC-1000029000">《Linux内核分析》MOOC课程</a></p>
