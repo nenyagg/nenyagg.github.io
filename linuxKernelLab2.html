@@ -76,6 +76,7 @@ for(i=1;i<MAX_TASK_NUM;i++)
 这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 `runnable`  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是`unrunnable` 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表
 
 ~~~~{c}
+/* start process 0 by task[0] */
 pid = 0;
 my_current_task = &task[pid];
 asm volatile(
@@ -88,7 +89,31 @@ asm volatile(
     : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
 );
 ~~~~
+这段代码如描述所说 开始执行0号进程  先将(task[pid].thread.sp放入栈顶 然后将(task[pid].thread.s push进来 此时esp向下移动 再将
+task[pid].thread.ip 入栈  该ip所指向的地址 就是进程0所准备执行代码的地址  然后用ref 进行跳转  并执行  当my_process返回后  执行
+pop  但由于该程序的my_process并不会返回 因此 pop指令也不会被执行
 
+~~~~{c}
+void my_process(void)
+{
+    int i = 0;
+    while(1)
+    {
+        i++;
+        if(i%10000000 == 0)
+        {
+            printk(KERN_NOTICE "this is process %d -\n",my_current_task->pid);
+            if(my_need_sched == 1)
+            {
+                my_need_sched = 0;
+        	    my_schedule();
+        	}
+        	printk(KERN_NOTICE "this is process %d +\n",my_current_task->pid);
+        }     
+    }
+}
+~~~~~
+之后便跳转到这条代码了   可以看到的是 这里使用了while(1)来进行循环 并且未设置出口  因此该函数会一直被执行下去
 
 
 
@@ -180,18 +205,41 @@ task<span class="token punctuation">[</span>pid<span class="token punctuation">]
 
 <p>这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 <code>runnable</code>  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是<code>unrunnable</code> 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表</p>
 
-<pre class=" language-c"><code class=" language-c">pid <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
-my_current_task <span class="token operator">=</span> <span class="token operator">&amp;</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">;</span>
-<span class="token keyword">asm</span> <span class="token keyword">volatile</span><span class="token punctuation">(</span>
-    <span class="token string">"movl %1,%%esp\n\t"</span>     <span class="token comment" spellcheck="true">/* set task[pid].thread.sp to esp */</span>
-    <span class="token string">"pushl %1\n\t"</span>          <span class="token comment" spellcheck="true">/* push ebp */</span>
-    <span class="token string">"pushl %0\n\t"</span>          <span class="token comment" spellcheck="true">/* push task[pid].thread.ip */</span>
-    <span class="token string">"ret\n\t"</span>               <span class="token comment" spellcheck="true">/* pop task[pid].thread.ip to eip */</span>
-    <span class="token string">"popl %%ebp\n\t"</span>
-    <span class="token punctuation">:</span> 
-    <span class="token punctuation">:</span> <span class="token string">"c"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"d"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span>   <span class="token comment" spellcheck="true">/* input c or d mean %ecx/%edx*/</span>
+<p></p><pre class=" language-c"><code class=" language-c"><span class="token comment" spellcheck="true">/* start process 0 by task[0] /
+pid = 0;
+my_current_task = &amp;task[pid];
+asm volatile(
+    "movl %1,%%esp\n\t"     / set task[pid].thread.sp to esp /
+    "pushl %1\n\t"          / push ebp /
+    "pushl %0\n\t"          / push task[pid].thread.ip /
+    "ret\n\t"               / pop task[pid].thread.ip to eip /
+    "popl %%ebp\n\t"
+    : 
+    : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   / input c or d mean %ecx/%edx*/</span>
 <span class="token punctuation">)</span><span class="token punctuation">;</span>
-</code></pre>
+</code></pre>这段代码如描述所说 开始执行0号进程  先将(task[pid].thread.sp放入栈顶 然后将(task[pid].thread.s push进来 此时esp向下移动 再将
+task[pid].thread.ip 入栈  该ip所指向的地址 就是进程0所准备执行代码的地址  然后用ref 进行跳转  并执行  当my<em>process返回后  执行
+pop  但由于该程序的my</em>process并不会返回 因此 pop指令也不会被执行<p></p>
+
+<p></p><pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">myprocess<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+    <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{</span>
+        i<span class="token operator">++</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span><span class="token punctuation">(</span>i<span class="token operator">%</span><span class="token number">10000000</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+        <span class="token punctuation">{</span>
+            <span class="token function">printk<span class="token punctuation">(</span></span>KERNNOTICE <span class="token string">"this is process %d -\n"</span><span class="token punctuation">,</span>mycurrenttask<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span><span class="token punctuation">(</span>myneedsched <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+            <span class="token punctuation">{</span>
+                myneedsched <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+                <span class="token function">myschedule<span class="token punctuation">(</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">}</span>
+            <span class="token function">printk<span class="token punctuation">(</span></span>KERNNOTICE <span class="token string">"this is process %d +\n"</span><span class="token punctuation">,</span>mycurrenttask<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> 
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+<span class="token operator">~</span></code></pre>之后便跳转到这条代码了   可以看到的是 这里使用了while(1)来进行循环 并且未设置出口  因此该函数会一直被执行下去<p></p>
 
 <p>鲍翔 +   原创作品转载请注明出处 + <a href="http://mooc.study.163.com/course/USTC-1000029000">《Linux内核分析》MOOC课程</a></p>
 <!-- content end -->
