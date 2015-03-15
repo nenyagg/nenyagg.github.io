@@ -27,7 +27,7 @@
 <!-- markdown -->
 #Linux内核分析 lab2
 ##完成一个简单的时间片轮转多道程序内核代码
-#更新中....
+
 实验环境: [实验楼虚拟机](http://www.shiyanlou.com/courses/195)
 
 实验目的: 通过完成一个简单的时间片轮转多道程序内核代码,分析进程的启动和进程的切换机制,理解操作系统是究竟是如何工作的
@@ -135,21 +135,10 @@ void my_timer_handler(void)
     return;  	
 }
 ~~~~
-当发生时钟中断时会跳转该代码 此次time\_count 计数器会+1,当中断执行1000次时,会执行piritk进行输出,并将my_need_sched置1
+当发生时钟中断时会跳转该代码 此次time\_count 计数器会+1,当中断执行1000次时,会执行piritk进行输出,并将my\_need\_sched置1,此时则会调用  `my_schedule(void)` 函数进行进程的调度
 
-
+###void my_schedule(void)
 ~~~~{c}
-void my_schedule(void)
-{
-    tPCB * next;
-    tPCB * prev;
-
-    if(my_current_task == NULL 
-        || my_current_task->next == NULL)
-    {
-    	return;
-    }
-    printk(KERN_NOTICE ">>>my_schedule<<<\n");
     /* schedule */
     next = my_current_task->next;
     prev = my_current_task;
@@ -171,7 +160,11 @@ void my_schedule(void)
     	my_current_task = next; 
     	printk(KERN_NOTICE ">>>switch %d to %d<<<\n",prev->pid,next->pid);   	
     }
-    else
+~~~~
+当next的state为 `runnable` 时 先将当前栈底进行保存,压入栈内,再将之前的ebp 现在存储在栈顶的数据保存在当前运行进程的pcb中进行保存, 将之后需要执行的进程的sp放入栈顶, 再将当前eip保存入当前执行进程的pcb中,将需要调度的进程ip从pcb中进行读取压入栈顶, ret跳转至下个进程执行的ip进行运行. 
+
+~~~~{c}
+ else
     {
         next->state = 0;
         my_current_task = next;
@@ -189,18 +182,11 @@ void my_schedule(void)
         	: "m" (next->thread.sp),"m" (next->thread.ip)
     	);          
     }   
-    return;	
-}
 ~~~~
-
-
-
-
+这段代码和上面那段区别并不大,就不进行详细说明了.
 
 ##总结
-
-
-
+中断的加入使得计算机可以进行多道程序的处理,而非单一的只能一个个的程序进行执行,提高了计算机的效率.虽然就单核cpu而已,从表面上看是一段时间只能做一件事,看似效率并没有增加,但实际上,多道程序处理可以使得计算机 当a程序执行至一半,需要b程序提供一些数据,而b又需要c的一些东西时,此时的效率则会大大的提升,因为多道程序处理可以在a执行一半时进行中断而执行b当b完成后又可以跳转至a,大大的提高了cpu的利用率.在本次实验中,我们利用了时间片来进行轮转调度,实际在各个操作系统中会有更多不同的调度算法,而正是这些调度算法提高了计算机的使用效率.
 
 
 
@@ -222,8 +208,6 @@ void my_schedule(void)
 <h1 id="linuxlab2">Linux内核分析 lab2</h1>
 
 <h2 id="">完成一个简单的时间片轮转多道程序内核代码</h2>
-
-<h1 id="">更新中....</h1>
 
 <p>实验环境: <a href="http://www.shiyanlou.com/courses/195">实验楼虚拟机</a></p>
 
@@ -276,23 +260,23 @@ task<span class="token punctuation">[</span>pid<span class="token punctuation">]
 
 <p>这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 <code>runnable</code>  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是<code>unrunnable</code> 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表</p>
 
-<pre class=" language-c"><code class=" language-c"><span class="token comment" spellcheck="true">/* start process 0 by task[0] */</span>
-pid <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
-my_current_task <span class="token operator">=</span> <span class="token operator">&amp;</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">;</span>
-<span class="token keyword">asm</span> <span class="token keyword">volatile</span><span class="token punctuation">(</span>
-    <span class="token string">"movl %1,%%esp\n\t"</span>     <span class="token comment" spellcheck="true">/* set task[pid].thread.sp to esp */</span>
-    <span class="token string">"pushl %1\n\t"</span>          <span class="token comment" spellcheck="true">/* push ebp */</span>
-    <span class="token string">"pushl %0\n\t"</span>          <span class="token comment" spellcheck="true">/* push task[pid].thread.ip */</span>
-    <span class="token string">"ret\n\t"</span>               <span class="token comment" spellcheck="true">/* pop task[pid].thread.ip to eip */</span>
-    <span class="token string">"popl %%ebp\n\t"</span>
-    <span class="token punctuation">:</span> 
-    <span class="token punctuation">:</span> <span class="token string">"c"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"d"</span> <span class="token punctuation">(</span>task<span class="token punctuation">[</span>pid<span class="token punctuation">]</span><span class="token punctuation">.</span>thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span>   <span class="token comment" spellcheck="true">/* input c or d mean %ecx/%edx*/</span>
+<p></p><pre class=" language-c"><code class=" language-c"><span class="token comment" spellcheck="true">/* start process 0 by task[0] /
+pid = 0;
+my_current_task = &amp;task[pid];
+asm volatile(
+    "movl %1,%%esp\n\t"     / set task[pid].thread.sp to esp /
+    "pushl %1\n\t"          / push ebp /
+    "pushl %0\n\t"          / push task[pid].thread.ip /
+    "ret\n\t"               / pop task[pid].thread.ip to eip /
+    "popl %%ebp\n\t"
+    : 
+    : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   / input c or d mean %ecx/%edx*/</span>
 <span class="token punctuation">)</span><span class="token punctuation">;</span>
 </code></pre>这段代码如描述所说 开始执行0号进程  先将(task[pid].thread.sp放入栈顶 然后将(task[pid].thread.s push进来 此时esp向下移动 再将
-task[pid].thread.ip 入栈  该ip所指向的地址 就是进程0所准备执行代码的地址  然后用ref 进行跳转  并执行  当my\_process返回后  执行
-pop  但由于该程序的my\_process并不会返回 因此 pop指令也不会被执行
+task[pid].thread.ip 入栈  该ip所指向的地址 就是进程0所准备执行代码的地址  然后用ref 进行跳转  并执行  当my_process返回后  执行
+pop  但由于该程序的my_process并不会返回 因此 pop指令也不会被执行<p></p>
 
-<pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">my_process<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<p></p><pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">myprocess<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
 <span class="token punctuation">{</span>
     <span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
     <span class="token keyword">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
@@ -300,91 +284,90 @@ pop  但由于该程序的my\_process并不会返回 因此 pop指令也不会�
         i<span class="token operator">++</span><span class="token punctuation">;</span>
         <span class="token keyword">if</span><span class="token punctuation">(</span>i<span class="token operator">%</span><span class="token number">10000000</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
         <span class="token punctuation">{</span>
-            <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"this is process %d -\n"</span><span class="token punctuation">,</span>my_current_task<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
-            <span class="token keyword">if</span><span class="token punctuation">(</span>my_need_sched <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+            <span class="token function">printk<span class="token punctuation">(</span></span>KERNNOTICE <span class="token string">"this is process %d -\n"</span><span class="token punctuation">,</span>mycurrenttask<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">if</span><span class="token punctuation">(</span>myneedsched <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
             <span class="token punctuation">{</span>
-                my_need_sched <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
-                <span class="token function">my_schedule<span class="token punctuation">(</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                myneedsched <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+                <span class="token function">myschedule<span class="token punctuation">(</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
             <span class="token punctuation">}</span>
-            <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"this is process %d +\n"</span><span class="token punctuation">,</span>my_current_task<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
-        <span class="token punctuation">}</span>     
+            <span class="token function">printk<span class="token punctuation">(</span></span>KERNNOTICE <span class="token string">"this is process %d +\n"</span><span class="token punctuation">,</span>mycurrenttask<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span> 
     <span class="token punctuation">}</span>
 <span class="token punctuation">}</span>
-<span class="token operator">~</span></code></pre>之后便跳转到这条代码了   可以看到的是 这里使用了while(1)来进行循环 并且未设置出口  因此该函数会一直被执行下去
+<span class="token operator">~</span></code></pre>之后便跳转到这条代码了   可以看到的是 这里使用了while(1)来进行循环 并且未设置出口  因此该函数会一直被执行下去<p></p>
 
-[myinterrupt.c](https://github.com/mengning/mykernel/blob/master/myinterrupt.c)
-这里实现进程的调度与中断,是多道程序操作系统的基点,计算机3法宝之一
+<p><a href="https://github.com/mengning/mykernel/blob/master/myinterrupt.c">myinterrupt.c</a>
+这里实现进程的调度与中断,是多道程序操作系统的基点,计算机3法宝之一</p>
 
-<pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">my_timer_handler<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<p></p><pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">mytimerhandler<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
 <span class="token punctuation">{</span>
-<span class="token property">#if 1</span>
-    <span class="token keyword">if</span><span class="token punctuation">(</span>time_count<span class="token operator">%</span><span class="token number">1000</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> my_need_sched <span class="token operator">!=</span> <span class="token number">1</span><span class="token punctuation">)</span>
-    <span class="token punctuation">{</span>
-        <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&gt;&gt;&gt;my_timer_handler here&lt;&lt;&lt;\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
-        my_need_sched <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
-    <span class="token punctuation">}</span> 
-    time_count <span class="token operator">++</span> <span class="token punctuation">;</span>  
-#endif
-    <span class="token keyword">return</span><span class="token punctuation">;</span>      
-<span class="token punctuation">}</span>
-</code></pre>当发生时钟中断时会跳转该代码 此次time\_count 计数器会+1,当中断执行1000次时,会执行piritk进行输出,并将my_need_sched置1
 
+<span class="token keyword">if</span> <span class="token number">1</span>
 
-<pre class=" language-c"><code class=" language-c"><span class="token keyword">void</span> <span class="token function">my_schedule<span class="token punctuation">(</span></span><span class="token keyword">void</span><span class="token punctuation">)</span>
+<span class="token keyword">if</span><span class="token punctuation">(</span>time_count<span class="token operator">%</span><span class="token number">1000</span> <span class="token operator">==</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> my_need_sched <span class="token operator">!=</span> <span class="token number">1</span><span class="token punctuation">)</span>
 <span class="token punctuation">{</span>
-    tPCB <span class="token operator">*</span> next<span class="token punctuation">;</span>
-    tPCB <span class="token operator">*</span> prev<span class="token punctuation">;</span>
+    <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&amp;gt;&amp;gt;&amp;gt;my_timer_handler here&amp;lt;&amp;lt;&amp;lt;\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    my_need_sched <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span> 
+time_count <span class="token operator">++</span> <span class="token punctuation">;</span>  
 
-    <span class="token keyword">if</span><span class="token punctuation">(</span>my_current_task <span class="token operator">==</span> NULL 
-        <span class="token operator">||</span> my_current_task<span class="token operator">-</span>&gt;next <span class="token operator">==</span> NULL<span class="token punctuation">)</span>
-    <span class="token punctuation">{</span>
-        <span class="token keyword">return</span><span class="token punctuation">;</span>
-    <span class="token punctuation">}</span>
-    <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&gt;&gt;&gt;my_schedule&lt;&lt;&lt;\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
-    <span class="token comment" spellcheck="true">/* schedule */</span>
-    next <span class="token operator">=</span> my_current_task<span class="token operator">-</span>&gt;next<span class="token punctuation">;</span>
-    prev <span class="token operator">=</span> my_current_task<span class="token punctuation">;</span>
-    <span class="token keyword">if</span><span class="token punctuation">(</span>next<span class="token operator">-</span>&gt;state <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token comment" spellcheck="true">/* -1 unrunnable, 0 runnable, &gt;0 stopped */</span>
-    <span class="token punctuation">{</span>
-        <span class="token comment" spellcheck="true">/* switch to next process */</span>
-        <span class="token keyword">asm</span> <span class="token keyword">volatile</span><span class="token punctuation">(</span>   
-            <span class="token string">"pushl %%ebp\n\t"</span>       <span class="token comment" spellcheck="true">/* save ebp */</span>
-            <span class="token string">"movl %%esp,%0\n\t"</span>     <span class="token comment" spellcheck="true">/* save esp */</span>
-            <span class="token string">"movl %2,%%esp\n\t"</span>     <span class="token comment" spellcheck="true">/* restore  esp */</span>
-            <span class="token string">"movl $1f,%1\n\t"</span>       <span class="token comment" spellcheck="true">/* save eip */</span> 
-            <span class="token string">"pushl %3\n\t"</span> 
-            <span class="token string">"ret\n\t"</span>               <span class="token comment" spellcheck="true">/* restore  eip */</span>
-            <span class="token string">"1:\t"</span>                  <span class="token comment" spellcheck="true">/* next process start here */</span>
+
+endif
+
+<span class="token keyword">return</span><span class="token punctuation">;</span>      
+
+
+</code><p><code class=" language-c"><span class="token punctuation">}</span>
+</code></p></pre>当发生时钟中断时会跳转该代码 此次time_count 计数器会+1,当中断执行1000次时,会执行piritk进行输出,并将my_need_sched置1,此时则会调用  <code>my_schedule(void)</code> 函数进行进程的调度<p></p>
+
+<h3 id="voidmy_schedulevoid">void my_schedule(void)</h3>
+
+<p></p><pre class=" language-c"><code class=" language-c">    <span class="token comment" spellcheck="true">/* schedule /
+    next = my_current_task-&gt;next;
+    prev = my_current_task;
+    if(next-&gt;state == 0)/ -1 unrunnable, 0 runnable, &gt;0 stopped /
+    {
+        / switch to next process /
+        asm volatile( 
+            "pushl %%ebp\n\t"       / save ebp /
+            "movl %%esp,%0\n\t"     / save esp /
+            "movl %2,%%esp\n\t"     / restore  esp /
+            "movl $1f,%1\n\t"       / save eip / 
+            "pushl %3\n\t" 
+            "ret\n\t"               / restore  eip /
+            "1:\t"                  / next process start here */</span>
             <span class="token string">"popl %%ebp\n\t"</span>
             <span class="token punctuation">:</span> <span class="token string">"=m"</span> <span class="token punctuation">(</span>prev<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"=m"</span> <span class="token punctuation">(</span>prev<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span>
             <span class="token punctuation">:</span> <span class="token string">"m"</span> <span class="token punctuation">(</span>next<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"m"</span> <span class="token punctuation">(</span>next<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span>
         <span class="token punctuation">)</span><span class="token punctuation">;</span> 
-        my_current_task <span class="token operator">=</span> next<span class="token punctuation">;</span> 
-        <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&gt;&gt;&gt;switch %d to %d&lt;&lt;&lt;\n"</span><span class="token punctuation">,</span>prev<span class="token operator">-</span>&gt;pid<span class="token punctuation">,</span>next<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>      
+        mycurrenttask <span class="token operator">=</span> next<span class="token punctuation">;</span> 
+        <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&gt;&gt;&gt;switch %d to %d&lt;&lt;&lt;\n"</span><span class="token punctuation">,</span>prev<span class="token operator">-</span>&gt;pid<span class="token punctuation">,</span>next<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span> 
     <span class="token punctuation">}</span>
-    <span class="token keyword">else</span>
+</code></pre>当next的state为 <code>runnable</code> 时 先将当前栈底进行保存,压入栈内,再将之前的ebp 现在存储在栈顶的数据保存在当前运行进程的pcb中进行保存, 将之后需要执行的进程的sp放入栈顶, 再将当前eip保存入当前执行进程的pcb中,将需要调度的进程ip从pcb中进行读取压入栈顶, ret跳转至下个进程执行的ip进行运行. <p></p>
+
+<p></p><pre class=" language-c"><code class=" language-c"> <span class="token keyword">else</span>
     <span class="token punctuation">{</span>
         next<span class="token operator">-</span>&gt;state <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
-        my_current_task <span class="token operator">=</span> next<span class="token punctuation">;</span>
+        mycurrenttask <span class="token operator">=</span> next<span class="token punctuation">;</span>
         <span class="token function">printk<span class="token punctuation">(</span></span>KERN_NOTICE <span class="token string">"&gt;&gt;&gt;switch %d to %d&lt;&lt;&lt;\n"</span><span class="token punctuation">,</span>prev<span class="token operator">-</span>&gt;pid<span class="token punctuation">,</span>next<span class="token operator">-</span>&gt;pid<span class="token punctuation">)</span><span class="token punctuation">;</span>
-        <span class="token comment" spellcheck="true">/* switch to new process */</span>
-        <span class="token keyword">asm</span> <span class="token keyword">volatile</span><span class="token punctuation">(</span>   
-            <span class="token string">"pushl %%ebp\n\t"</span>       <span class="token comment" spellcheck="true">/* save ebp */</span>
-            <span class="token string">"movl %%esp,%0\n\t"</span>     <span class="token comment" spellcheck="true">/* save esp */</span>
-            <span class="token string">"movl %2,%%esp\n\t"</span>     <span class="token comment" spellcheck="true">/* restore  esp */</span>
-            <span class="token string">"movl %2,%%ebp\n\t"</span>     <span class="token comment" spellcheck="true">/* restore  ebp */</span>
-            <span class="token string">"movl $1f,%1\n\t"</span>       <span class="token comment" spellcheck="true">/* save eip */</span> 
-            <span class="token string">"pushl %3\n\t"</span> 
-            <span class="token string">"ret\n\t"</span>               <span class="token comment" spellcheck="true">/* restore  eip */</span>
+        <span class="token comment" spellcheck="true">/* switch to new process /
+        asm volatile( 
+            "pushl %%ebp\n\t"       / save ebp /
+            "movl %%esp,%0\n\t"     / save esp /
+            "movl %2,%%esp\n\t"     / restore  esp /
+            "movl %2,%%ebp\n\t"     / restore  ebp /
+            "movl $1f,%1\n\t"       / save eip / 
+            "pushl %3\n\t" 
+            "ret\n\t"               / restore  eip */</span>
             <span class="token punctuation">:</span> <span class="token string">"=m"</span> <span class="token punctuation">(</span>prev<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"=m"</span> <span class="token punctuation">(</span>prev<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span>
             <span class="token punctuation">:</span> <span class="token string">"m"</span> <span class="token punctuation">(</span>next<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>sp<span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">"m"</span> <span class="token punctuation">(</span>next<span class="token operator">-</span>&gt;thread<span class="token punctuation">.</span>ip<span class="token punctuation">)</span>
-        <span class="token punctuation">)</span><span class="token punctuation">;</span>          
-    <span class="token punctuation">}</span>   
-    <span class="token keyword">return</span><span class="token punctuation">;</span>    
-<span class="token punctuation">}</span>
-</code></pre>
+        <span class="token punctuation">)</span><span class="token punctuation">;</span> 
+    <span class="token punctuation">}</span> 
+</code></pre>这段代码和上面那段区别并不大,就不进行详细说明了.<p></p>
 
 <h2 id="">总结</h2>
+
+<p>中断的加入使得计算机可以进行多道程序的处理,而非单一的只能一个个的程序进行执行,提高了计算机的效率.虽然就单核cpu而已,从表面上看是一段时间只能做一件事,看似效率并没有增加,但实际上,多道程序处理可以使得计算机 当a程序执行至一半,需要b程序提供一些数据,而b又需要c的一些东西时,此时的效率则会大大的提升,因为多道程序处理可以在a执行一半时进行中断而执行b当b完成后又可以跳转至a,大大的提高了cpu的利用率.在本次实验中,我们利用了时间片来进行轮转调度,实际在各个操作系统中会有更多不同的调度算法,而正是这些调度算法提高了计算机的使用效率.</p>
 
 <p>鲍翔 +   原创作品转载请注明出处 + <a href="http://mooc.study.163.com/course/USTC-1000029000">《Linux内核分析》MOOC课程</a></p>
 <!-- content end -->
