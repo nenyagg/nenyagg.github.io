@@ -53,40 +53,40 @@ $ qemu -kernel arch/x86/boot/bzImage
 
 内核从mymain.c 中的my_start_kernel函数开始执行
 ```c
-    int pid = 0;
-    int i;
-    /* Initialize process 0*/
-    task[pid].pid = pid;
-    task[pid].state = 0;/* -1 unrunnable, 0 runnable, >0 stopped */
-    task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
-    task[pid].thread.sp = (unsigned long)&task[pid].stack[KERNEL_STACK_SIZE-1];
-    task[pid].next = &task[pid];
-    /*fork more process */
-    for(i=1;i<MAX_TASK_NUM;i++)
-    {
-        memcpy(&task[i],&task[0],sizeof(tPCB));
-        task[i].pid = i;
-        task[i].state = -1;
-        task[i].thread.sp = (unsigned long)&task[i].stack[KERNEL_STACK_SIZE-1];
-        task[i].next = task[i-1].next;
-        task[i-1].next = &task[i];
-    }
+int pid = 0;
+int i;
+/* Initialize process 0*/
+task[pid].pid = pid;
+task[pid].state = 0;/* -1 unrunnable, 0 runnable, >0 stopped */
+task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
+task[pid].thread.sp = (unsigned long)&task[pid].stack[KERNEL_STACK_SIZE-1];
+task[pid].next = &task[pid];
+/*fork more process */
+for(i=1;i<MAX_TASK_NUM;i++)
+{
+    memcpy(&task[i],&task[0],sizeof(tPCB));
+    task[i].pid = i;
+    task[i].state = -1;
+    task[i].thread.sp = (unsigned long)&task[i].stack[KERNEL_STACK_SIZE-1];
+    task[i].next = task[i-1].next;
+    task[i-1].next = &task[i];
+}
 ```
 这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 `runnable`  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是`unrunnable` 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表
 
 
 ```c
-    pid = 0;
-    my_current_task = &task[pid];
-	asm volatile(
-    	"movl %1,%%esp\n\t" 	/* set task[pid].thread.sp to esp */
-    	"pushl %1\n\t" 	        /* push ebp */
-    	"pushl %0\n\t" 	        /* push task[pid].thread.ip */
-    	"ret\n\t" 	            /* pop task[pid].thread.ip to eip */
-    	"popl %%ebp\n\t"
-    	: 
-    	: "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)	/* input c or d mean %ecx/%edx*/
-	);
+pid = 0;
+my_current_task = &task[pid];
+asm volatile(
+    "movl %1,%%esp\n\t"     /* set task[pid].thread.sp to esp */
+    "pushl %1\n\t"          /* push ebp */
+    "pushl %0\n\t"          /* push task[pid].thread.ip */
+    "ret\n\t"               /* pop task[pid].thread.ip to eip */
+    "popl %%ebp\n\t"
+    : 
+    : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
+);
 ```
 
 
@@ -158,39 +158,39 @@ $ qemu -kernel arch/x86/boot/bzImage
 
 <p>内核从mymain.c 中的my<em>start</em>kernel函数开始执行</p>
 
-<pre><code class="c">    int pid = 0;
-    int i;
-    /* Initialize process 0*/
-    task[pid].pid = pid;
-    task[pid].state = 0;/* -1 unrunnable, 0 runnable, &gt;0 stopped */
-    task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
-    task[pid].thread.sp = (unsigned long)&amp;task[pid].stack[KERNEL_STACK_SIZE-1];
-    task[pid].next = &amp;task[pid];
-    /*fork more process */
-    for(i=1;i&lt;MAX_TASK_NUM;i++)
-    {
-        memcpy(&amp;task[i],&amp;task[0],sizeof(tPCB));
-        task[i].pid = i;
-        task[i].state = -1;
-        task[i].thread.sp = (unsigned long)&amp;task[i].stack[KERNEL_STACK_SIZE-1];
-        task[i].next = task[i-1].next;
-        task[i-1].next = &amp;task[i];
-    }
+<pre><code class="c">int pid = 0;
+int i;
+/* Initialize process 0*/
+task[pid].pid = pid;
+task[pid].state = 0;/* -1 unrunnable, 0 runnable, &gt;0 stopped */
+task[pid].task_entry = task[pid].thread.ip = (unsigned long)my_process;
+task[pid].thread.sp = (unsigned long)&amp;task[pid].stack[KERNEL_STACK_SIZE-1];
+task[pid].next = &amp;task[pid];
+/*fork more process */
+for(i=1;i&lt;MAX_TASK_NUM;i++)
+{
+    memcpy(&amp;task[i],&amp;task[0],sizeof(tPCB));
+    task[i].pid = i;
+    task[i].state = -1;
+    task[i].thread.sp = (unsigned long)&amp;task[i].stack[KERNEL_STACK_SIZE-1];
+    task[i].next = task[i-1].next;
+    task[i-1].next = &amp;task[i];
+}
 </code></pre>
 
 <p>这一段代码非常明显  先将pid 初始化为0 并对0号进程的pcb进行初始化 将它的状态设为 <code>runnable</code>  设置进程入口  将my_process函数的ip赋值给pcb  设置栈底指针 最后将pcb.next指向自身 因为此处是初始化 并未确定后面是否有其他pcb,因此需要指向自身.之后对后面新进入的pcb进行初始化.过程与前面相同,要注意的是之后pcb的state都是<code>unrunnable</code> 由于0号进程会先进行执行被cpu所调度,因此之后的进程都是不可被执行的,只有等0号执行完或时间片执行完系统进行中断后才会调度并执行之后的进程.其次还要注意pcb的next指针.  task[i].next = task[i-1].next; 保证了末尾的next始终是指向头部的,形成一个单循环链表</p>
 
-<pre><code class="c">    pid = 0;
-    my_current_task = &amp;task[pid];
-    asm volatile(
-        "movl %1,%%esp\n\t"     /* set task[pid].thread.sp to esp */
-        "pushl %1\n\t"          /* push ebp */
-        "pushl %0\n\t"          /* push task[pid].thread.ip */
-        "ret\n\t"               /* pop task[pid].thread.ip to eip */
-        "popl %%ebp\n\t"
-        : 
-        : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
-    );
+<pre><code class="c">pid = 0;
+my_current_task = &amp;task[pid];
+asm volatile(
+    "movl %1,%%esp\n\t"     /* set task[pid].thread.sp to esp */
+    "pushl %1\n\t"          /* push ebp */
+    "pushl %0\n\t"          /* push task[pid].thread.ip */
+    "ret\n\t"               /* pop task[pid].thread.ip to eip */
+    "popl %%ebp\n\t"
+    : 
+    : "c" (task[pid].thread.ip),"d" (task[pid].thread.sp)   /* input c or d mean %ecx/%edx*/
+);
 </code></pre>
 
 <p>鲍翔 +   原创作品转载请注明出处 + <a href="http://mooc.study.163.com/course/USTC-1000029000">《Linux内核分析》MOOC课程</a></p>
